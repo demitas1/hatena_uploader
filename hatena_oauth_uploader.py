@@ -16,6 +16,8 @@ import re
 import urllib.parse
 import webbrowser
 from requests_oauthlib import OAuth1Session
+from dateutil import parser as date_parser
+import pytz
 
 class HatenaBlogOAuthUploader:
     def __init__(self, config_file="hatena_oauth_config.json"):
@@ -191,6 +193,26 @@ class HatenaBlogOAuthUploader:
 
         return front_matter, content
 
+    def parse_date(self, date_string):
+        """日付文字列をISO 8601形式に変換"""
+        if not date_string:
+            return None
+
+        try:
+            # 様々な日付フォーマットを解析
+            parsed_date = date_parser.parse(date_string)
+
+            # タイムゾーンが設定されていない場合はJSTを設定
+            if parsed_date.tzinfo is None:
+                jst = pytz.timezone('Asia/Tokyo')
+                parsed_date = jst.localize(parsed_date)
+
+            # ISO 8601形式で返す
+            return parsed_date.isoformat()
+        except Exception as e:
+            print(f"日付の解析に失敗しました: {date_string} - {e}")
+            return None
+
     def markdown_to_hatena(self, markdown_content):
         """MarkdownをはてなブログHTML形式に変換"""
         # 基本的なMarkdown to HTML変換
@@ -224,7 +246,7 @@ class HatenaBlogOAuthUploader:
 
         return html
 
-    def create_atom_entry(self, title, content, categories=None, draft=False):
+    def create_atom_entry(self, title, content, categories=None, draft=False, published_date=None, updated_date=None, author=None, summary=None):
         """AtomPub用のXMLエントリを作成"""
         entry = ET.Element('entry')
         entry.set('xmlns', 'http://www.w3.org/2005/Atom')
@@ -234,10 +256,31 @@ class HatenaBlogOAuthUploader:
         title_elem = ET.SubElement(entry, 'title')
         title_elem.text = title
 
+        # 投稿者
+        if author:
+            author_elem = ET.SubElement(entry, 'author')
+            name_elem = ET.SubElement(author_elem, 'name')
+            name_elem.text = author
+
+        # 要約
+        if summary:
+            summary_elem = ET.SubElement(entry, 'summary')
+            summary_elem.text = summary
+
         # 本文
         content_elem = ET.SubElement(entry, 'content')
         content_elem.set('type', 'text/html')
         content_elem.text = content
+
+        # 公開日時
+        if published_date:
+            published_elem = ET.SubElement(entry, 'published')
+            published_elem.text = published_date
+
+        # 更新日時
+        if updated_date:
+            updated_elem = ET.SubElement(entry, 'updated')
+            updated_elem.text = updated_date
 
         # カテゴリ
         if categories:
@@ -253,13 +296,13 @@ class HatenaBlogOAuthUploader:
 
         return ET.tostring(entry, encoding='unicode')
 
-    def upload_entry(self, title, content, categories=None, draft=False):
+    def upload_entry(self, title, content, categories=None, draft=False, published_date=None, updated_date=None, author=None, summary=None):
         """エントリをはてなブログにアップロード"""
         if not self.access_token or not self.access_token_secret:
             print("認証が必要です。先に authenticate() を実行してください。")
             return False
 
-        atom_entry = self.create_atom_entry(title, content, categories, draft)
+        atom_entry = self.create_atom_entry(title, content, categories, draft, published_date, updated_date, author, summary)
 
         # OAuth認証セッションを作成
         oauth = OAuth1Session(
@@ -327,6 +370,26 @@ class HatenaBlogOAuthUploader:
         # 下書き設定
         is_draft = front_matter.get('draft', 'false').lower() == 'true' or draft
 
+        # 日付情報を取得・変換
+        published_date = None
+        updated_date = None
+
+        # 公開日時（date または published）
+        date_value = front_matter.get('date') or front_matter.get('published')
+        if date_value:
+            published_date = self.parse_date(date_value)
+
+        # 更新日時
+        updated_value = front_matter.get('updated')
+        if updated_value:
+            updated_date = self.parse_date(updated_value)
+
+        # 投稿者情報
+        author = front_matter.get('author')
+
+        # 要約情報（summary または excerpt）
+        summary = front_matter.get('summary') or front_matter.get('excerpt')
+
         # Markdownをはてなブログ形式に変換
         html_content = self.markdown_to_hatena(markdown_content)
 
@@ -334,10 +397,18 @@ class HatenaBlogOAuthUploader:
         print(f"タイトル: {title}")
         print(f"カテゴリ: {', '.join(categories) if categories else 'なし'}")
         print(f"下書き: {'はい' if is_draft else 'いいえ'}")
+        if author:
+            print(f"投稿者: {author}")
+        if summary:
+            print(f"要約: {summary}")
+        if published_date:
+            print(f"公開日時: {published_date}")
+        if updated_date:
+            print(f"更新日時: {updated_date}")
         print()
 
         # アップロード
-        return self.upload_entry(title, html_content, categories, is_draft)
+        return self.upload_entry(title, html_content, categories, is_draft, published_date, updated_date, author, summary)
 
 def main():
     parser = argparse.ArgumentParser(
