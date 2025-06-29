@@ -62,7 +62,7 @@ greet("World");
 
 ## 画像
 
-<img src="https://via.placeholder.com/600x300/0066cc/ffffff?text=Sample+Image" alt="サンプル画像" />
+<img src="https://i.imgur.com/Zx4idbu.jpg" alt="サンプル画像" />
 
 ## 数式
 

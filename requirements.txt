@@ -3,3 +3,4 @@ requests-oauthlib
 markdown
 python-dateutil
 pytz
+pyyaml
