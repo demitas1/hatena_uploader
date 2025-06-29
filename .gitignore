@@ -18,4 +18,6 @@ log/
 *.jpeg
 *.png
 secrets/
+images/
+output/
 CLAUDE.md
