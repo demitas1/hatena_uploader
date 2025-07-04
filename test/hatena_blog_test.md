@@ -3,8 +3,9 @@ title: "マークダウンテスト記事"
 description: "はてなブログのためのマークダウン記法テスト"
 pubDate: "2025-06-28"
 author: "テスト太郎"
-tags: マークダウン, テスト, 数学
+tags: マークダウン, テスト, プログラミング
 heroImage: "/images/hero-test.jpg"
+draft: false
 ---
 
 # マークダウンテスト記事
@@ -68,9 +69,11 @@ heroImage: "/images/hero-test.jpg"
 
 ## 画像
 
+
+<img src="https://cdn-ak.f.st-hatena.com/images/fotolife/d/demiplus/20250703/20250703132808.png" alt="my_render.png">
+
+
 ![サンプル画像](https://i.imgur.com/Zx4idbu.jpg)
-
-
 
 ---
 

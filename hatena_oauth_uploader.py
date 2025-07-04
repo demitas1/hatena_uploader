@@ -18,9 +18,11 @@ import webbrowser
 from requests_oauthlib import OAuth1Session
 from dateutil import parser as date_parser
 import pytz
+import mimetypes
+import base64
 
 class HatenaBlogOAuthUploader:
-    def __init__(self, config_file="hatena_oauth_config.json"):
+    def __init__(self, config_file):
         self.config = {}
         self.config_file = self._resolve_config_path(config_file)
         self.load_config()
@@ -33,19 +35,12 @@ class HatenaBlogOAuthUploader:
         # AtomPub API エンドポイント
         self.api_url = f"https://blog.hatena.ne.jp/{self.hatena_id}/{self.blog_id}/atom/entry"
 
+        # 画像アップロード用エンドポイント（はてなフォトライフ用）
+        self.image_upload_url = f"https://f.hatena.ne.jp/atom/post/{self.hatena_id}"
+
     def _resolve_config_path(self, config_file):
-        """設定ファイルのパスをsecretsディレクトリに解決する"""
-        # secretsディレクトリのパス
-        secrets_dir = Path("secrets")
-
-        # secretsディレクトリが存在しない場合は作成
-        if not secrets_dir.exists():
-            secrets_dir.mkdir(parents=True, exist_ok=True)
-            print(f"secretsディレクトリを作成しました: {secrets_dir.absolute()}")
-
-        # 設定ファイルをsecretsディレクトリ内に配置
-        config_path = secrets_dir / config_file
-
+        """設定ファイルのパスを解決する (将来拡張用)"""
+        config_path = config_file
         return str(config_path)
 
     def load_config(self):
@@ -410,6 +405,187 @@ class HatenaBlogOAuthUploader:
         # アップロード
         return self.upload_entry(title, html_content, categories, is_draft, published_date, updated_date, author, summary)
 
+    def upload_image(self, image_path, verbose=False, output_file=None):
+        """画像をはてなフォトライフにアップロード"""
+        image_path = Path(image_path)
+
+        # ファイル存在確認
+        if not image_path.exists():
+            print(f"画像ファイルが見つかりません: {image_path}")
+            return None
+
+        # MIMEタイプチェック
+        mime_type, _ = mimetypes.guess_type(str(image_path))
+        if not mime_type:
+            print(f"MIMEタイプを判定できません: {image_path}")
+            return None
+        if verbose:
+            print(f'MIME type = {mime_type}')
+
+        # 画像ファイルチェック (jpg, png のみ許可)
+        if not mime_type.startswith('image/'):
+            print(f"画像ファイルではありません: {image_path} (MIME: {mime_type})")
+            return None
+
+        # jpg, png のみ許可
+        if mime_type not in ['image/jpeg', 'image/png']:
+            print(f"サポートされていない画像形式です: {mime_type} (jpg, png のみ対応)")
+            return None
+
+        # 認証チェック
+        if not self.access_token or not self.access_token_secret:
+            print("認証が必要です。先に authenticate() を実行してください。")
+            return None
+
+        # 画像ファイルを読み込み
+        try:
+            with open(image_path, 'rb') as f:
+                image_data = f.read()
+        except Exception as e:
+            print(f"画像ファイルの読み込みに失敗しました: {e}")
+            return None
+
+        # Base64エンコード
+        encoded_image = base64.b64encode(image_data).decode('utf-8')
+
+        # はてなフォトライフ用のXMLエントリを作成
+        entry_xml = f'''<?xml version="1.0" encoding="utf-8"?>
+<entry xmlns="http://www.w3.org/2005/Atom">
+    <title>{image_path.name}</title>
+    <content mode="base64" type="{mime_type}">{encoded_image}</content>
+</entry>'''
+
+        # OAuth認証セッションを作成
+        oauth = OAuth1Session(
+            client_key=self.consumer_key,
+            client_secret=self.consumer_secret,
+            resource_owner_key=self.access_token,
+            resource_owner_secret=self.access_token_secret
+        )
+
+        # ヘッダーの設定
+        headers = {
+            'Content-Type': 'application/atom+xml; charset=utf-8'
+        }
+
+        try:
+            response = oauth.post(
+                self.image_upload_url,
+                data=entry_xml.encode('utf-8'),
+                headers=headers
+            )
+
+            if response.status_code == 201:
+                if verbose:
+                    # デバッグ用: レスポンス全体を表示
+                    print("\n=== デバッグ: XMLレスポンス全体 ===")
+                    print(response.text)
+                    print("=== デバッグ終了 ===\n")
+
+                # XMLレスポンスを解析して画像URLを取得
+                try:
+                    root = ET.fromstring(response.text)
+
+                    if verbose:
+                        # デバッグ用: XMLの構造を表示
+                        print("=== XMLの構造解析 ===")
+                        for elem in root.iter():
+                            print(f"要素: {elem.tag}, 属性: {elem.attrib}, テキスト: {elem.text}")
+                        print("=== 構造解析終了 ===\n")
+
+                    # はてな独自の名前空間から画像URLを取得
+                    hatena_ns = 'http://www.hatena.ne.jp/info/xmlns#'
+
+                    # 各サイズの画像URLを取得
+                    imageurl_elem = root.find(f'.//{{{hatena_ns}}}imageurl')
+                    imageurl_medium_elem = root.find(f'.//{{{hatena_ns}}}imageurlmedium')
+                    imageurl_small_elem = root.find(f'.//{{{hatena_ns}}}imageurlsmall')
+
+                    # 結果データを集約
+                    result_data = {
+                        "success": True,
+                        "filename": image_path.name,
+                        "urls": {}
+                    }
+
+                    if imageurl_elem is not None and imageurl_elem.text:
+                        original_url = imageurl_elem.text
+                        result_data["urls"]["original"] = original_url
+
+                        if imageurl_medium_elem is not None and imageurl_medium_elem.text:
+                            medium_url = imageurl_medium_elem.text
+                            result_data["urls"]["medium"] = medium_url
+
+                        if imageurl_small_elem is not None and imageurl_small_elem.text:
+                            small_url = imageurl_small_elem.text
+                            result_data["urls"]["small"] = small_url
+
+                        result_data["html_tag"] = f'<img src="{original_url}" alt="{image_path.name}">'
+
+                        # 出力処理
+                        if output_file:
+                            # JSONファイルに保存
+                            with open(output_file, 'w', encoding='utf-8') as f:
+                                json.dump(result_data, f, indent=2, ensure_ascii=False)
+                            print(f"結果を{output_file}に保存しました")
+                        else:
+                            # 標準出力に表示
+                            print("=== 画像アップロード完了 ===")
+                            print(f"オリジナル画像URL: {original_url}")
+
+                            if "medium" in result_data["urls"]:
+                                print(f"中サイズ画像URL: {result_data['urls']['medium']}")
+
+                            if "small" in result_data["urls"]:
+                                print(f"小サイズ画像URL: {result_data['urls']['small']}")
+
+                            print(f"\nブログ記事で使用する場合:")
+                            print(result_data["html_tag"])
+                            print("========================\n")
+
+                        return original_url
+                    else:
+                        # 従来の方法でのフォールバック
+                        content_elem = root.find('.//{http://www.w3.org/2005/Atom}content')
+                        if content_elem is not None and 'src' in content_elem.attrib:
+                            image_url = content_elem.attrib['src']
+                            print(f"画像のアップロードが完了しました: {image_url}")
+                            return image_url
+                        else:
+                            # alternativeとしてlink要素を確認
+                            link_elem = root.find('.//{http://www.w3.org/2005/Atom}link[@rel="edit-media"]')
+                            if link_elem is not None and 'href' in link_elem.attrib:
+                                edit_url = link_elem.attrib['href']
+                                print(f"画像のアップロードが完了しました: {edit_url}")
+                                return edit_url
+                            else:
+                                # location headerから取得を試行
+                                location = response.headers.get('Location', '')
+                                if location:
+                                    print(f"画像のアップロードが完了しました: {location}")
+                                    return location
+                                else:
+                                    print("XMLレスポンスから画像URLを取得できませんでした")
+                                    return None
+                except ET.ParseError as e:
+                    print(f"XMLレスポンスの解析に失敗しました: {e}")
+                    print(f"レスポンス: {response.text}")
+                    return None
+            else:
+                print(f"画像のアップロードに失敗しました: {response.status_code}")
+                print(f"エラー内容: {response.text}")
+
+                # 認証エラーの場合はトークンをリセット
+                if response.status_code == 401:
+                    print("認証エラーです。アクセストークンをリセットします。")
+                    self.save_access_token('', '')
+
+                return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"通信エラー: {e}")
+            return None
+
 def main():
     parser = argparse.ArgumentParser(
         description='はてなブログOAuth投稿ツール'
@@ -430,9 +606,23 @@ def main():
         help='設定ファイルのパス'
     )
     parser.add_argument(
-        '--auth',
+        '--auth-only',
         action='store_true',
         help='OAuth認証のみを実行（ファイル投稿は行わない）'
+    )
+    parser.add_argument(
+        '--image',
+        action='store_true',
+        help='ファイルを画像として扱い、画像アップロードを行う'
+    )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='詳細なデバッグ情報を表示'
+    )
+    parser.add_argument(
+        '--output',
+        help='結果をJSON形式で保存するファイルパス'
     )
 
     args = parser.parse_args()
@@ -446,24 +636,34 @@ def main():
         sys.exit(1)
 
     # 認証のみの場合は終了
-    if args.auth:
+    if args.auth_only:
         print("OAuth認証が完了しました。")
         return
 
     # ファイルが指定されていない場合
     if not args.file:
         print("投稿するファイルを指定してください。")
-        print("認証のみを行う場合は --auth オプションを使用してください。")
+        print("認証のみを行う場合は --auth-only オプションを使用してください。")
         sys.exit(1)
 
-    # ファイルをアップロード
-    success = uploader.upload_file(args.file, args.draft)
-
-    if success:
-        print("アップロードが完了しました！")
+    # 画像アップロードまたはブログ投稿の分岐処理
+    if args.image:
+        # 画像アップロード
+        image_url = uploader.upload_image(args.file, args.verbose, args.output)
+        if image_url:
+            if not args.output:  # 標準出力の場合のみ表示
+                print(f"画像アップロードが完了しました！")
+        else:
+            print("画像アップロードに失敗しました。")
+            sys.exit(1)
     else:
-        print("アップロードに失敗しました。")
-        sys.exit(1)
+        # ブログ投稿
+        success = uploader.upload_file(args.file, args.draft)
+        if success:
+            print("ブログ投稿が完了しました！")
+        else:
+            print("ブログ投稿に失敗しました。")
+            sys.exit(1)
 
 if __name__ == '__main__':
     main()
