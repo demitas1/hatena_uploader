@@ -1,15 +1,19 @@
 ---
-title: "マークダウンテスト記事"
-description: "Astroブログのためのマークダウン記法テスト"
-pubDate: "2025-06-28"
-author: "テスト太郎"
-tags: ["マークダウン", "テスト", "数学"]
-heroImage: "/images/hero-test.jpg"
+title: "テスト記事"
+description: "はてなブログのマークダウン記法テスト"
+pubDate: "2025-07-04"
+author: "demiplus"
+tags: ["マークダウン", "テスト", "プログラミング"]
+draft: false
 ---
 
 # マークダウンテスト記事
 
-これはAstroブログのためのテスト記事です。様々なマークダウン記法と数式の表示をテストします。
+これははてなブログのためのテスト記事です。様々なマークダウン記法の表示をテストします。
+
+## 画像
+
+![サンプル画像](https://cdn-ak.f.st-hatena.com/images/fotolife/d/demiplus/20250704/20250704105936.jpg)
 
 ## 基本的なテキスト装飾
 
@@ -58,48 +62,8 @@ greet("World");
 
 ## 外部リンク
 
-詳細については[Wikipedia](https://ja.wikipedia.org/)を参照してください。
-
-## 画像
-
-<img src="https://i.imgur.com/Zx4idbu.jpg" alt="サンプル画像" />
-
-## 数式
-
-### 二次方程式の解の公式
-
-二次方程式 $ax^2 + bx + c = 0$ の解は以下の公式で求められます：
-
-$$
-x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
-$$
-
-### オイラーの公式
-
-オイラーの公式は数学で最も美しい式の一つとされています：
-
-$$
-e^{i\pi} + 1 = 0
-$$
-
-または、より一般的な形では：
-
-$$
-e^{i\theta} = \cos\theta + i\sin\theta
-$$
-
-### 留数定理
-
-複素関数論における留数定理は以下のように表されます：
-
-$$
-\oint_C f(z) dz = 2\pi i \sum_{k} \text{Res}(f, a_k)
-$$
-
-ここで、$C$は閉曲線、$a_k$は$C$内部の特異点、$\text{Res}(f, a_k)$は点$a_k$における$f$の留数です。
-
-## 水平線
+詳細については[Markdown(Wikipedia)](https://ja.wikipedia.org/wiki/Markdown)を参照してください。
 
 ---
 
-以上がマークダウンテストの内容です。この記事では基本的なマークダウン記法から数式まで幅広くカバーしています。
+以上がマークダウンテストの内容です。
