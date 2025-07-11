@@ -12,8 +12,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 import requests
-import markdown
-from mdx_gfm import GithubFlavoredMarkdownExtension
+import mistune
 import re
 import urllib.parse
 import webbrowser
@@ -22,6 +21,7 @@ from dateutil import parser as date_parser
 import pytz
 import mimetypes
 import base64
+
 
 class HatenaBlogOAuthUploader:
     def __init__(self, config_file):
@@ -220,21 +220,7 @@ class HatenaBlogOAuthUploader:
     def markdown_to_html(self, markdown_content, hatena=False):
         """MarkdownをはてなブログHTML形式に変換"""
         # 基本的なMarkdown to HTML変換
-        # TODO: mistuneの使用をためす. 入れ子箇条書きが正しくない
-        html = markdown.markdown(
-            markdown_content,
-            extensions=[
-                GithubFlavoredMarkdownExtension(),
-                'codehilite',
-                'toc',
-                ],
-            extension_configs={
-                'codehilite': {
-                    'css_class': 'highlight',
-                    'use_pygments': False
-                    }
-                }
-        )
+        html = mistune.html(markdown_content)
 
         # はてなブログ特有の変換
         if hatena:

@@ -1,6 +1,6 @@
 requests
 requests-oauthlib
-markdown
+mistune
 python-dateutil
 pytz
 pyyaml
